@@ -117,7 +117,7 @@ author:
   avatar           : "/images/profileScene.jpg"
   bio              : "경험과 정보를 담는 스페이스"
   #location         : "South Korea"
-  email            : "jsr_bile@naver.com"
+  #email            : "jsr_bile@naver.com"
   links:
     - label: "Youtube"
       icon: "fa-brands fa-youtube"
@@ -128,14 +128,15 @@ author:
     - label: "Notion"
       icon: "fa-solid fa-n"
       url: "http://hun2.notion.site"
-
-# Site Footer
-footer:
-  links:  
+      links:  
     - label: "Instagram"
       icon: "fab fa-fw fa-instagram"
       url: "https://www.instagram.com/skkhun.2"
 
+
+# Site Footer
+footer:
+  
 
 # Reading Files
 include:
