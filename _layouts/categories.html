@@ -4,4 +4,16 @@ layout: archive
 
 {{ content }}
 
-{% include posts-taxonomy.html taxonomies=site.categories %}
+<div class="entries-{{ page.entries_layout | default: 'list' }}">
+  {% for category in site.categories %}
+    {% capture category_name %}{{ category | first }}{% endcapture %}
+    <section id="{{ category_name | slugify }}" class="taxonomy__section">
+      <h2 class="archive__subtitle">{{ category_name }}</h2>
+      <div class="entries-{{ page.entries_layout | default: 'list' }}">
+        {% for post in site.categories[category_name] %}
+          {% include archive-single.html type=page.entries_layout %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>
