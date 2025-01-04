@@ -115,26 +115,23 @@ analytics:
 author:
   name             : "Seok Hun"
   avatar           : "/images/profileScene.jpg"
-  bio              : "경험과 정보를 담는 스페이스?"
+  bio              : "경험과 정보를 담는 스페이스"
   #location         : "South Korea"
   email            : "jsr_bile@naver.com"
   links:
-    - label: "Email"
-      icon: "fas fa-fw fa-envelope-square"
-      url: "jsr_bile@naver.com"
     - label: "Youtube"
-      icon: "fas fa-fw fa-youtube"
+      icon: "fa-brands fa-youtube"
       url: "https://youtube.com/channel/UCefvo-jzz86YXTLWRl0JDGA?si=jV2ndav6_ehJaZsF"
     - label: "GitHub"
       icon: "fab fa-fw fa-github"
       url: "https://github.com/SoekHun"
-
-# Site Footer
-footer:
-  links:
     - label: "Notion"
       icon: "fa-solid fa-n"
       url: "http://hun2.notion.site"
+
+# Site Footer
+footer:
+  links:  
     - label: "Instagram"
       icon: "fab fa-fw fa-instagram"
       url: "https://www.instagram.com/skkhun.2"
