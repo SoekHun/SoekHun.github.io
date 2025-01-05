@@ -139,6 +139,6 @@ search: false
 - **효율적이고 체계적인 기획**은 개발 품질을 높이고, 유지보수와 확장을 용이하게 함.
 - 이 강의는 실무 중심의 접근 방식을 통해 시스템 기획자의 필수 역량과 기획 전략을 구체적으로 제시하며, 현업 적용 가능성을 극대화함.
 
-![기획 흐름도 예제](https://prod-files-secure.s3.us-west-2.amazonaws.com/da9ccd1b-c997-46a2-866d-f48a92208cea/4bf03cbf-61c6-48d9-9651-74cf05a68f7b/image.png)
+![기획 흐름도 예제](/images/2025-GameDesign/GSystemD0.png)
 
-![시스템 설계 다이어그램](https://prod-files-secure.s3.us-west-2.amazonaws.com/da9ccd1b-c997-46a2-866d-f48a92208cea/e7592d82-9501-4594-9072-34f9d17d7c7e/image.png)
+![시스템 설계 다이어그램](/images/2025-GameDesign/GSystemD1.png)
