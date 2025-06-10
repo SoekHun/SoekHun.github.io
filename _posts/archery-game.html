@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>2D 양궁 슬링샷 게임</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        body {
+            font-family: 'Jua', sans-serif;
+            background-color: #3B82F6; /* 파란색 배경 */
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none; /* 모바일에서 스크롤 방지 */
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px; /* 최대 너비 제한 */
+            height: 100vh;
+            max-height: 900px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #FFFFFF 100%); /* 하늘 배경 */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        canvas {
+            display: block;
+            background-color: transparent; /* 캔버스 배경 투명 */
+            width: 100%;
+            height: 100%;
+        }
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.8rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none; /* UI가 게임 입력을 방해하지 않도록 함 */
+        }
+        #game-over-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.75);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: none; /* 기본적으로 숨김 */
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            z-index: 100;
+        }
+        #game-over-modal h2 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+        #game-over-modal p {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+        #restart-button {
+            font-family: 'Jua', sans-serif;
+            font-size: 1.5rem;
+            padding: 15px 30px;
+            border: none;
+            background-color: #FBBF24; /* 노란색 버튼 */
+            color: #78350F; /* 진한 갈색 텍스트 */
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #D97706;
+            transition: all 0.1s ease-in-out;
+        }
+        #restart-button:active {
+            transform: translateY(5px);
+            box-shadow: none;
+        }
+        #ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 15%; /* 바닥 영역 */
+            background-color: #22C55E; /* 초록색 잔디 */
+            border-top: 5px solid #16A34A;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="score">점수: 0</div>
+            <div id="arrows">남은 화살: 10 🏹</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="ground"></div>
+        <div id="game-over-modal">
+            <h2>게임 종료</h2>
+            <p id="final-score"></p>
+            <button id="restart-button">다시 시작</button>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM 요소 가져오기 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const arrowsEl = document.getElementById('arrows');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const finalScoreEl = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+
+        // --- 캔버스 크기 조절 ---
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            resetGame();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        
+        // --- 게임 상태 변수 ---
+        let score = 0;
+        let arrowsLeft = 10;
+        let isAiming = false;
+        let isFlying = false;
+        let isTransitioning = false; // 스테이지 전환 애니메이션 상태
+        let floatingScores = []; // 떠다니는 점수 텍스트 배열
+        let transitionProgress = 0;
+        const transitionDuration = 60; // 프레임 단위 (더 자연스럽게)
+
+        // --- 물리 상수 ---
+        const gravity = 0.2;
+
+        // --- 게임 객체 ---
+        let bow = { x: 0, y: 0, width: 80, height: 120 };
+        let arrow = { x: 0, y: 0, width: 80, height: 5, vx: 0, vy: 0 };
+        let target = { x: 0, y: 0, radius: 40, dx: 2, isMovingUp: true };
+        let lastHitInfo = null; // 마지막으로 맞춘 과녁 정보 (상세 정보 포함)
+        let startPoint = { x: 0, y: 0 };
+        let endPoint = { x: 0, y: 0 };
+
+        // --- 게임 초기화 함수 ---
+        function resetGame() {
+            score = 0;
+            arrowsLeft = 10;
+            isAiming = false;
+            isFlying = false;
+            isTransitioning = false;
+            floatingScores = [];
+            transitionProgress = 0;
+            lastHitInfo = null;
+            
+            updateUI();
+            resetLevel();
+
+            gameOverModal.style.display = 'none';
+        }
+        
+        // --- 레벨 초기화 함수 ---
+        function resetLevel(isInitial = true) {
+            isFlying = false;
+
+            bow.x = 50;
+            bow.y = canvas.height * 0.75;
+
+            arrow.x = bow.x + bow.width / 2;
+            arrow.y = bow.y;
+            arrow.vx = 0;
+            arrow.vy = 0;
+            
+            target.x = canvas.width - 80;
+            if (isInitial || !lastHitInfo) {
+                target.y = canvas.height * 0.6;
+            } else {
+                const prevY = lastHitInfo.y;
+                target.y = Math.max(target.radius, Math.min(canvas.height - target.radius * 2, prevY + (Math.random() - 0.5) * 200));
+            }
+            target.radius = Math.max(15, 40 - score * 0.2); 
+            target.dx = 2 + score * 0.05;
+        }
+
+        // --- UI 업데이트 함수 ---
+        function updateUI() {
+            scoreEl.textContent = `점수: ${score}`;
+            arrowsEl.textContent = `남은 화살: ${arrowsLeft} 🏹`;
+        }
+        
+        function showFloatingScore(points, x, y) {
+            floatingScores.push({ text: `+${points}`, x, y, life: 60, opacity: 1 });
+        }
+
+        // --- 그리기 함수 ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+
+            let transitionOffsetX = 0;
+            if (isTransitioning) {
+                const easedProgress = 0.5 - 0.5 * Math.cos((transitionProgress / transitionDuration) * Math.PI);
+                transitionOffsetX = -easedProgress * (canvas.width); // 화면 전체만큼 이동
+                ctx.translate(transitionOffsetX, 0);
+            }
+            
+            drawBow();
+            
+            if (isTransitioning && lastHitInfo) {
+                drawSpecificTarget(lastHitInfo.x, lastHitInfo.y, lastHitInfo.radius);
+                drawStuckArrow(lastHitInfo.arrowX, lastHitInfo.arrowY, lastHitInfo.arrowAngle);
+                drawTarget(); 
+            } else {
+                drawTarget();
+            }
+
+            if (isFlying) {
+                drawFlyingArrow();
+            } else if (!isTransitioning) {
+                drawArrowOnBow();
+                if (isAiming) {
+                    drawAimLine();
+                    drawTrajectory();
+                }
+            }
+            
+            ctx.restore();
+            drawFloatingScores(transitionOffsetX);
+        }
+        
+        function drawFloatingScores(offsetX = 0) {
+            ctx.save();
+            ctx.font = "bold 32px 'Jua', sans-serif";
+            ctx.textAlign = "center";
+            for (let i = floatingScores.length - 1; i >= 0; i--) {
+                const fs = floatingScores[i];
+                ctx.fillStyle = `rgba(255, 215, 0, ${fs.opacity})`;
+                ctx.fillText(fs.text, fs.x + offsetX, fs.y);
+            }
+            ctx.restore();
+        }
+
+        function drawStuckArrow(x, y, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            // 비행 화살 그리기 코드와 동일
+            ctx.fillStyle = '#D2B48C';
+            ctx.fillRect(0, -2.5, arrow.width * 0.8, 5);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.moveTo(arrow.width * 0.8, -5);
+            ctx.lineTo(arrow.width, 0);
+            ctx.lineTo(arrow.width * 0.8, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(-5, -7, 10, 2);
+            ctx.fillRect(-5, 5, 10, 2);
+            ctx.restore();
+        }
+        
+        function drawSpecificTarget(x, y, radius) {
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(x, y, radius * 0.66, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0000FF';
+            ctx.beginPath();
+            ctx.arc(x, y, radius * 0.33, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawTarget() {
+            drawSpecificTarget(target.x, target.y, target.radius);
+        }
+
+        function drawBow() {
+             ctx.save();
+            ctx.translate(bow.x, bow.y);
+            ctx.beginPath();
+            ctx.moveTo(0, -bow.height / 2);
+            ctx.quadraticCurveTo(bow.width / 2, 0, 0, bow.height / 2);
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = '#8B4513';
+            ctx.stroke();
+
+            ctx.beginPath();
+            if (isAiming) {
+                const pullX = Math.max(0, startPoint.x - endPoint.x) * 0.2;
+                ctx.moveTo(0, -bow.height / 2);
+                ctx.lineTo(pullX, 0);
+                ctx.lineTo(0, bow.height / 2);
+            } else {
+                ctx.moveTo(0, -bow.height / 2);
+                ctx.lineTo(0, bow.height / 2);
+            }
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawArrowOnBow() {
+            ctx.save();
+            ctx.translate(arrow.x, arrow.y);
+            if (isAiming) {
+                const angle = Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
+                ctx.rotate(angle);
+            }
+            ctx.fillStyle = '#D2B48C';
+            ctx.fillRect(0, -2.5, arrow.width * 0.8, 5);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.moveTo(arrow.width * 0.8, -5);
+            ctx.lineTo(arrow.width, 0);
+            ctx.lineTo(arrow.width * 0.8, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(-5, -7, 10, 2);
+            ctx.fillRect(-5, 5, 10, 2);
+            ctx.restore();
+        }
+        
+        function drawFlyingArrow() {
+            ctx.save();
+            ctx.translate(arrow.x, arrow.y);
+            const angle = Math.atan2(arrow.vy, arrow.vx);
+            ctx.rotate(angle);
+            ctx.fillStyle = '#D2B48C';
+            ctx.fillRect(0, -2.5, arrow.width * 0.8, 5);
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.moveTo(arrow.width * 0.8, -5);
+            ctx.lineTo(arrow.width, 0);
+            ctx.lineTo(arrow.width * 0.8, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(-5, -7, 10, 2);
+            ctx.fillRect(-5, 5, 10, 2);
+            ctx.restore();
+        }
+
+        function drawAimLine() {
+            ctx.beginPath();
+            ctx.moveTo(startPoint.x, startPoint.y);
+            ctx.lineTo(endPoint.x, endPoint.y);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawTrajectory() {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([2, 4]);
+            const power = Math.min(15, Math.hypot(startPoint.x - endPoint.x, startPoint.y - endPoint.y) / 15);
+            const angle = Math.atan2(startPoint.y - endPoint.y, startPoint.x - endPoint.x);
+            let projX = arrow.x;
+            let projY = arrow.y;
+            let projVx = power * Math.cos(angle);
+            let projVy = power * Math.sin(angle);
+            ctx.beginPath();
+            ctx.moveTo(projX, projY);
+            for (let i = 0; i < 100; i++) {
+                projVx *= 0.998;
+                projVy += gravity;
+                projX += projVx;
+                projY += projVy;
+                ctx.lineTo(projX, projY);
+                if(projY > canvas.height) break;
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        // --- 업데이트 함수 ---
+        function update() {
+            // --- 전환 애니메이션 로직 ---
+            if (isTransitioning) {
+                transitionProgress++;
+                // 맞은 과녁과 새 과녁 모두 계속 움직임
+                if (lastHitInfo) {
+                    lastHitInfo.y += lastHitInfo.isMovingUp ? -lastHitInfo.dx : lastHitInfo.dx;
+                }
+                target.y += target.isMovingUp ? -target.dx : target.dx;
+
+                // 전환 종료
+                if (transitionProgress >= transitionDuration) {
+                    isTransitioning = false;
+                    transitionProgress = 0;
+                    resetLevel(false);
+                    lastHitInfo = null;
+                }
+            }
+
+            // --- 일반 게임 로직 ---
+            if (isFlying) {
+                arrow.vy += gravity;
+                arrow.vx *= 0.998;
+                arrow.x += arrow.vx;
+                arrow.y += arrow.vy;
+                checkCollision();
+            } else if (!isTransitioning) {
+                // 조준 중일 때 과녁 움직임
+                target.y += target.isMovingUp ? -target.dx : target.dx;
+                if (target.y < target.radius || target.y > canvas.height - target.radius * 2) {
+                    target.isMovingUp = !target.isMovingUp;
+                }
+            }
+            
+            // --- 떠다니는 점수 업데이트 ---
+            for (let i = floatingScores.length - 1; i >= 0; i--) {
+                const fs = floatingScores[i];
+                fs.y -= 1;
+                fs.life--;
+                fs.opacity = fs.life / 60;
+                if (fs.life <= 0) floatingScores.splice(i, 1);
+            }
+        }
+        
+        // --- 충돌 감지 함수 ---
+        function checkCollision() {
+            if (!isFlying) return;
+
+            const dx = arrow.x - target.x;
+            const dy = arrow.y - target.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // BUG FIX: 정확한 충돌 판정을 위해 `+ arrow.width / 2` 제거
+            if (distance < target.radius) {
+                isFlying = false;
+                
+                let points = 0;
+                if (distance < target.radius * 0.33) {
+                    points = 3; // 파란색 (중앙)
+                } else if (distance < target.radius * 0.66) {
+                    points = 2; // 흰색 (중간)
+                } else {
+                    points = 1; // 빨간색 (바깥)
+                }
+                score += points;
+                showFloatingScore(points, target.x, target.y);
+                updateUI();
+                
+                // 맞은 과녁과 화살의 정보를 저장하여 전환 애니메이션에 사용
+                lastHitInfo = { 
+                    x: target.x, y: target.y, radius: target.radius,
+                    dx: target.dx, isMovingUp: target.isMovingUp,
+                    arrowX: arrow.x, arrowY: arrow.y,
+                    arrowAngle: Math.atan2(arrow.vy, arrow.vx)
+                };
+                
+                isTransitioning = true;
+                transitionProgress = 0;
+
+            } else if (arrow.y > canvas.height || arrow.x > canvas.width || arrow.x < 0) {
+                isFlying = false;
+                if (arrowsLeft <= 0) {
+                    gameOver();
+                } else {
+                    // 실패 시에는 전환 없이 제자리에서 리셋
+                    setTimeout(() => resetLevel(false), 500);
+                }
+            }
+        }
+
+        function gameOver() {
+            finalScoreEl.textContent = `최종 점수: ${score}`;
+            gameOverModal.style.display = 'flex';
+        }
+
+        // --- 입력 처리 함수 ---
+        function handleMouseDown(e) {
+            if (isFlying || arrowsLeft <= 0 || isTransitioning) return;
+            isAiming = true;
+            const pos = getMousePos(e);
+            startPoint = { ...pos };
+            endPoint = { ...pos };
+        }
+
+        function handleMouseMove(e) {
+            if (!isAiming) return;
+            const pos = getMousePos(e);
+            endPoint = { ...pos };
+        }
+
+        function handleMouseUp(e) {
+            if (!isAiming) return;
+            isAiming = false;
+            
+            arrowsLeft--;
+            updateUI();
+            
+            const dx = startPoint.x - endPoint.x;
+            const dy = startPoint.y - endPoint.y;
+            const power = Math.min(15, Math.hypot(dx, dy) / 15);
+            const angle = Math.atan2(dy, dx);
+            
+            arrow.vx = power * Math.cos(angle);
+            arrow.vy = power * Math.sin(angle);
+            
+            isFlying = true;
+            
+            if (arrowsLeft <= 0) {
+                 setTimeout(() => {
+                    if (isFlying) { // 마지막 화살이 날아가고 있는 중이면 (명중 못했다면)
+                        gameOver();
+                    }
+                }, 2000); 
+            }
+        }
+        
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        // --- 게임 루프 ---
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- 이벤트 리스너 연결 ---
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('touchstart', handleMouseDown, { passive: false });
+        canvas.addEventListener('touchmove', handleMouseMove, { passive: false });
+        canvas.addEventListener('touchend', handleMouseUp);
+        
+        restartButton.addEventListener('click', () => {
+             resizeCanvas();
+        });
+
+        // --- 게임 시작 ---
+        resizeCanvas();
+        gameLoop();
+    </script>
+</body>
+</html>
